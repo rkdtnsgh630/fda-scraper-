@@ -1,18 +1,16 @@
 import os
 import time
 from datetime import datetime, timedelta
-
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
-
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
-# =============== 환경 변수로부터 서비스 계정 키 파일 복원 ===============
+# 환경 변수로부터 서비스 계정 복원
 if os.getenv("GOOGLE_CREDENTIALS"):
     with open("service_account_credentials.json", "w") as f:
         f.write(os.getenv("GOOGLE_CREDENTIALS"))
@@ -38,6 +36,7 @@ except Exception as e:
     print(f"❌ 구글 시트 인증 실패: {e}")
     exit()
 
+
 # --- 기준 날짜 계산 함수 ---
 def parse_date(date_str):
     for fmt in ('%B %d, %Y', '%m/%d/%Y'):
@@ -46,6 +45,7 @@ def parse_date(date_str):
         except (ValueError, TypeError):
             continue
     return None
+
 
 # --- Selenium 웹 드라이버 설정 ---
 options = webdriver.ChromeOptions()
@@ -89,11 +89,15 @@ try:
         info_element = wait.until(EC.visibility_of_element_located((By.ID, 'datatable_info')))
         print(f"📊 검색 정보: {info_element.text}")
     except Exception as e:
-        print(f"❌ 페이지 초기 로딩 실패: {e}")
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        with open(f"initial_load_page_{timestamp}.html", "w", encoding="utf-8") as f:
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        screenshot_file = f"initial_load_screenshot_{timestamp}.png"
+        html_file = f"initial_load_page_{timestamp}.html"
+        driver.save_screenshot(screenshot_file)
+        with open(html_file, 'w', encoding='utf-8') as f:
             f.write(driver.page_source)
-        driver.save_screenshot(f"initial_load_screenshot_{timestamp}.png")
+        print(f"❌ 페이지 초기 로딩 실패: {e}")
+        print(f"📸 스크린샷 저장됨: {screenshot_file}")
+        print(f"📄 HTML 저장됨: {html_file}")
         raise
 
     collected_rows = []
@@ -103,13 +107,11 @@ try:
         table_body = wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "#datatable > tbody")))
         rows = table_body.find_elements(By.TAG_NAME, "tr")
 
-        if len(rows) == 1 and "No matching records found" in rows[0].text:
-            break
+        if len(rows) == 1 and "No matching records found" in rows[0].text: break
 
         for row in rows:
             cols = row.find_elements(By.TAG_NAME, 'td')
-            if len(cols) < 5:
-                continue
+            if len(cols) < 5: continue
             posted_date = cols[0].text.strip()
             if posted_date in date_str_set:
                 found_in_date_range_on_this_page = True
@@ -123,20 +125,19 @@ try:
                 print(f"  -> 목록 수집: {posted_date}, {company_name}")
                 collected_rows.append([posted_date, issue_date, company_name, subject, link])
 
-        if not found_in_date_range_on_this_page:
-            print("⚠️ 이 페이지에 수집 대상 날짜가 없습니다. 더 이상 진행하지 않습니다.")
+        if not found_in_date_range_on_this_page and page > 1:
+            print("📉 수집 대상 날짜의 데이터가 없어 조기 종료합니다.")
             break
 
         try:
             pagination_info_element = driver.find_element(By.ID, "datatable_paginate")
             if 'class="paginate_button page-item next disabled"' in pagination_info_element.get_attribute('innerHTML'):
-                print("마지막 페이지에 도달했습니다.")
+                print("🔚 마지막 페이지에 도달했습니다.")
                 break
-            print("다음 페이지로 이동합니다.")
             driver.execute_script("jQuery('#datatable').DataTable().page('next').draw('page');")
             time.sleep(3)
         except Exception as e:
-            print(f"페이지 이동 중 오류 발생: {e}")
+            print(f"⚠️ 페이지 이동 중 오류 발생: {e}")
             break
 
     if not collected_rows:
@@ -162,7 +163,6 @@ try:
     #########################################################################
     print("\n" + "=" * 20 + " 2부: 본문 내용 채우기 시작 " + "=" * 20)
 
-    print("📊 구글 시트 데이터를 다시 읽어와 본문이 비어있는 행을 찾습니다...")
     result = sheet.values().get(spreadsheetId=SPREADSHEET_ID, range=f'{SHEET_NAME}!A2:F').execute()
     all_rows = result.get('values', [])
 
@@ -175,7 +175,7 @@ try:
     if not tasks:
         print("✅ 모든 행의 본문이 채워져 있습니다. 작업을 종료합니다.")
     else:
-        print(f"총 {len(tasks)}개의 비어있는 본문을 채웁니다.")
+        print(f"📝 총 {len(tasks)}개의 비어있는 본문을 채웁니다.")
         for i, task in enumerate(tasks):
             link = task['link']
             target_cell = task['cell']
@@ -198,18 +198,13 @@ try:
                 time.sleep(1)
 
             except TimeoutException:
-                print("    -> 오류: 본문 내용을 시간 내에 찾지 못했습니다. 건너뜁니다.")
+                print("    ⚠️ 오류: 본문 내용을 시간 내에 찾지 못했습니다. 건너뜁니다.")
             except Exception as e:
-                print(f"    -> 알 수 없는 오류 발생: {e}. 건너뜁니다.")
+                print(f"    ❌ 알 수 없는 오류 발생: {e}. 건너뜁니다.")
         print("✅ 2부: 본문 채우기 작업 완료")
 
 except Exception as e:
     print(f"❌ 알 수 없는 오류 발생: {e}")
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    with open(f"general_error_page_{timestamp}.html", "w", encoding="utf-8") as f:
-        f.write(driver.page_source)
-    driver.save_screenshot(f"general_error_screenshot_{timestamp}.png")
-
 finally:
     if 'driver' in locals():
         driver.quit()
