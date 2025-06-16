@@ -1,3 +1,9 @@
+import os
+
+if os.getenv("GOOGLE_CREDENTIALS"):
+    with open("service_account_credentials.json", "w") as f:
+        f.write(os.getenv("GOOGLE_CREDENTIALS"))
+
 import time
 from datetime import datetime, timedelta
 
