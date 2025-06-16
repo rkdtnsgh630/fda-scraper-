@@ -2,7 +2,7 @@ name: Run FDA Scraper Daily
 
 on:
   schedule:
-    - cron: '0 21 * * *'
+    - cron: '0 21 * * *'  # 매일 KST 06:00
   workflow_dispatch:
 
 jobs:
@@ -26,8 +26,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install selenium google-api-python-client google-auth-httplib2 google-auth-oauthlib
 
-      - name: Create Google Credentials File
-        run: echo "${{ secrets.GOOGLE_CREDENTIALS }}" > service_account_credentials.json
-
       - name: Run Python Scraper
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
         run: python web_scraper_to_sheets.py
